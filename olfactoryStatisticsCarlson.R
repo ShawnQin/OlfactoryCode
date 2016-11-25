@@ -1,5 +1,7 @@
 #*****************************************************************************
 #this program reanalyze the Olfactory Sensory Neurons in Carlson's paper,2006
+#in a recent baper writen by Charles Steven at UCSD, the author reanalyzed this 
+# data set and argued that the distribution is exponentail
 #writen by Shanshan Qin @ Tang Lab,Peking University
 #last revised on Mar 04/01/2016
 #******************************************************************************
@@ -8,12 +10,21 @@
 library(xlsx)
 library(RColorBrewer) #this package is used for color settings
 library(ggplot2)
-library(sm)
-library(vioplot)
-library(fheatmap)    #package used to plot awsome heatmap
-library(corrgram)    #package used to plot correlation matrix
-library(corrplot)    #package that draw elegant correlation matrix
-library(rgl)         #to plot 3D figure of PCA result
+library(fitdistrplus) #statistical test
+library(vcd)
+library(lattice)
+library(latticeExtra) #plot cumulative density functions
+# library(MASS)
+# library(sm)
+# library(vioplot)     # violin plot of data
+# library(fheatmap)    #package used to plot awsome heatmap
+# library(corrgram)    #package used to plot correlation matrix
+# library(corrplot)    #package that draw elegant correlation matrix
+# library(rgl)         #to plot 3D figure of PCA result
+
+# source other R scripts
+source("testDistriOSNOr.R")   #plot all single OSN or Odor
+source("testDistAll.R")     #plot overall response distribtuion
 
 #change the workspace
 FileFolder<-"/home/shan/GoogleDrive/olfactoryCoding"
@@ -22,9 +33,11 @@ setwd(FileFolder)
 #load data file
 filePath<-"/home/shan/GoogleDrive/olfactoryCoding/data/Carlson20016TableS1.xlsx"
 digiFile<-"/home/shan/GoogleDrive/olfactoryCoding/data/CarslonORNdigit.xlsx"
+fruitFile <- "/home/shan/GoogleDrive/olfactoryCoding/data/Carlson2006TableS2.xlsx"
 #filePath<-"Carlson20016TableS1.xlsx"
 rawData1<-read.xlsx(filePath,1)   #with the last line as the 
-digitResponse<-read.xlsx(digiFile,1)
+concenData <- read.xlsx(fruitFile,1) # different concentration and fruit odor mixtures
+digitResponse<-read.xlsx(digiFile,1) 
 
 #load the function for correlaogram
 source("rquery.cormat.R")
@@ -34,12 +47,187 @@ source("rquery.cormat.R")
 #convert the list into a vector
 rawMatx<-as.matrix(subset(rawData1,select = 3:length(rawData1)))
 rownames(rawMatx)<-unlist(rawData1[1]) #set the name of each row, need to convert list to vector
-rawList<-as.numeric(as.list(rawMatx))   #first, converted to a list, then convert data type
+rawList<-as.numeric(as.list(rawMatx[-1,]))   #first, converted to a list, without spontaneous firing rate
+
+#convert this table into absolute spiking rate
+spRate <- rbind(rawMatx[111,],abs(apply(rawMatx, 2, min)))
+setSponRate <- apply(spRate, 2, max)  # set the spontaneous spiking rate of each Or
+resetPosiMatr <- rawMatx[-1,] + matrix(rep(setSponRate,times = 110),nrow = 110,ncol = 24,byrow = TRUE)
+# another way to set the spontaneous response is just use  the rate identified
+resetPosiMatr2 <- rawMatx[-1,] + matrix(rep(rawMatx[111,],times = 110),nrow = 110,ncol = 24,byrow = TRUE)
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#overall response data
+# histogram
 dev.new()
-figure1<-hist(rawList,seq(min(rawList),max(rawList),20),xlab = "Spiking Rate(Hz)",ylab = "Frequency",col = "gray")
+figure1<-hist(rawList,seq(min(rawList),max(rawList),20),main = NA,xlab = "Spiking Rate(Hz)",ylab = "Frequency",col = "gray",cex.lab = 1.5, cex.axis = 1.5)
 box() #add box
 
+#test if they follows exponential or lognornal distribution
+figureName <- "allStatistics"
+testDistAll(resetPosiMatr,"lnorm",figureName)
+# allFit <- fitdist(log(resetPosiMatr[resetPosiMatr>0]),"norm") #first transform and then fit normal distribution
+# figureName <- paste("allStatistics_","lnorm",".pdf",sep="")
+# pdf(figureName,width = 8,height = 6)
+# par(mfrow=c(2,2),mai=c(0.7,0.8,0.3,0.5))
+# denscomp(allFit,datacol = "gray",fitcol = "red",xlab = "spiking rate(Hz)",addlegend = FALSE,main = "",lwd = 1.5,cex.lab = 1.5,cex.axis = 1.5)
+# cdfcomp(allFit,addlegend = FALSE,lwd = 1.5,main = "",cex.lab = 1.5,cex.axis = 1.5)  #compare cdf of emperical data and theoretical
+# qqcomp(allFit,fitcol= "black",line01col = "red",main = "",addlegend = FALSE,lwd = 1.5,cex.lab = 1.5,cex.axis = 1.5)
+# ppcomp(allFit,fitcol= "black",line01col = "red",main = "",addlegend = FALSE,lwd = 1.5,cex.lab = 1.5,cex.axis = 1.5)
+# dev.off()
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#all excitatory response
+exciList <- rawList[rawList>0]
+figureName <- "allStatExci"
+testDistAll(exciList,"lnorm",figureName)
+# staDist <- "exp"  # here, we test if it is exponentail of lognorm
+# fitExciAll <- fitdist(exciList,staDist)
+# # ks.test(exciList, "pexp", fitExciAll$estimate) # goodness test
+# # dev.new()
+# figureName <- paste("allExcitatoryStatistics_",staDist,".pdf",sep="")
+# pdf(figureName,width = 8,height = 6)
+# par(mfrow=c(2,2),mai=c(0.7,0.8,0.3,0.5))
+# denscomp(fitExciAll,datacol = "gray",fitcol = "red",xlab = "spiking rate (Hz)",addlegend = FALSE,main = "",lwd = 1.5,cex.lab = 1.5,cex.axis = 1.5)
+# cdfcomp(fitExciAll,addlegend = FALSE,lwd = 1.5,main = "",cex.lab = 1.5,cex.axis = 1.5)  #compare cdf of emperical data and theoretical
+# qqcomp(fitExciAll,fitcol= "black",line01col = "red",main = "",addlegend = FALSE,lwd = 1.5,cex.lab = 1.5,cex.axis = 1.5)
+# ppcomp(fitExciAll,fitcol= "black",line01col = "red",main = "",addlegend = FALSE,lwd = 1.5,cex.lab = 1.5,cex.axis = 1.5)
+# dev.off()
+
+# par(mai=c(1,1.5,0.5,0.5))
+# hist(exciList, freq = FALSE, breaks = 50, xlim = c(0, quantile(exciList, 0.99)),main ="",xlab = "spiking rate (Hz)",col = "gray",cex.lab = 2,cex.axis = 1.5)
+# curve(dexp(x, rate = fitExciAll$estimate), col = "red", lwd =2,add = TRUE) #overlay an exponential distribution
+# dev.off()
+
+#all inhibitory response
+inhiList <- abs(rawList[rawList<0])
+figureName <- "allStatInhi"
+testDistAll(inhiList,"exp",figureName)
+# fitInhiAll<- fitdist(log(inhiList),"norm")
+# ks.test(inhiList,"pexp", fitInhiAll$estimate)
+# pdf("allInhibitoryStatistics_lnorm.pdf",width = 8,height = 6)
+# par(mfrow=c(2,2),mai=c(0.7,0.8,0.3,0.5))
+# denscomp(fitInhiAll,datacol = "gray",fitcol = "red",xlab = "log(spiking rate)",addlegend = FALSE,main = "",lwd = 1.5,cex.lab = 1.5,cex.axis = 1.5)
+# cdfcomp(fitInhiAll,addlegend = FALSE,lwd = 1.5,main = "",cex.lab = 1.5,cex.axis = 1.5)  #compare cdf of emperical data and theoretical
+# qqcomp(fitInhiAll,fitcol= "black",line01col = "red",main = "",addlegend = FALSE,lwd = 1.5,cex.lab = 1.5,cex.axis = 1.5)
+# ppcomp(fitInhiAll,fitcol= "black",line01col = "red",main = "",addlegend = FALSE,lwd = 1.5,cex.lab = 1.5,cex.axis = 1.5)
+# dev.off()
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+# cummulative distribution of each OSN, test if it is exponential 
+testDistriOSNOr(resetPosiMatr,"lnorm",normalizedRate = 48)
+# pdf("testDistriOSN.pdf",width = 8,height = 6)
+# par(mfrow=c(2,2),mai=c(0.7,0.8,0.3,0.5))
+# 
+# # original data
+# plot.ecdf(rawMatx[,1],do.points=FALSE,xlim = c(-50,290),main = "",xlab = "spiking rate (HZ)", ylab = "cdf",cex.lab = 1.5,cex.axis = 1.5)
+# for (i0 in 2:dim(rawMatx)[2]){
+#   temp <- ecdf(rawMatx[,i0])
+#   plot(temp,verticals=TRUE, do.points=FALSE,add=TRUE)
+# }
+# 
+# #normalized to 100 Hz 
+# normVal <- 50  # normalized average sipking rate
+# averageSpikes <- apply(resetPosiMatr, 2, mean)
+# afterScaleMatr <- resetPosiMatr*matrix(rep(normVal/averageSpikes,110),nrow = 110, ncol = 24, byrow = TRUE)  #normalized to average spking rate as 100 Hz
+# 
+# 
+# index <- seq(1,300,1)
+# allCdf <- matrix(0,nrow = length(index),ncol = dim(afterScaleMatr)[2])
+# 
+# fit1 <- ecdf(afterScaleMatr[,1])
+# allCdf[,1] <- fit1(index)
+# plot(fit1,do.points=FALSE,xlim = c(0,300),main ="",ylab = "cdf",xlab = "spiking rate (Hz)",cex.lab = 1.5,cex.axis = 1.5)
+# for (i0 in 2:dim(afterScaleMatr)[2]){
+#   temp <- ecdf(afterScaleMatr[,i0])
+#   plot(temp,verticals=TRUE, do.points=FALSE,add=TRUE)
+#   allCdf[,i0] <- temp(index)
+# }
+# 
+# # generated from exponential distributions
+# plot(ecdf(rexp(110,rate = 1/normVal)),verticals=TRUE, do.points=FALSE,main = "",xlim = c(0,300),xlab = "spiking rate (Hz)",ylab = "cdf",cex.lab = 1.5,cex.axis = 1.5)
+# for (i0 in 2:dim(afterScaleMatr)[2]){
+#   plot(ecdf(rexp(110,rate = 1/normVal)),verticals=TRUE, do.points=FALSE,add=TRUE)
+# }
+# 
+# #plot the average cdf
+# plot(index,apply(allCdf, 1,mean),main = "",xlab = "spiking rate (Hz)",ylab = "cdf",cex.lab = 1.5,cex.axis = 1.5)
+# curve(pexp(x, rate = 1/normVal), col = "red", lwd =3,add = TRUE) #overlay an exponential distribution
+# dev.off()
+
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# cumulative distribution of odorants
+
+testDistriOSNOr(t(resetPosiMatr),"exp",normalizedRate = 48)
+pdf("testDistriOdorant.pdf",width = 8,height = 6)
+par(mfrow=c(2,2),mai=c(0.7,0.8,0.3,0.5))
+
+# original data
+plot.ecdf(rawMatx[1,],do.points=FALSE,xlim = c(-50,290),main = "",xlab = "spiking rate (HZ)", ylab = "cdf",cex.lab = 1.5,cex.axis = 1.5)
+for (i0 in 2:dim(rawMatx)[1]){
+  temp <- ecdf(rawMatx[i0,])
+  plot(temp,verticals=TRUE, do.points=FALSE,add=TRUE)
+}
+
+#normalized to 100 Hz 
+normVal <- 50  # normalized average sipking rate
+averageSpikesOdor <- apply(resetPosiMatr, 1, mean)
+afterScaleMatrOdor <- resetPosiMatr*matrix(rep(normVal/averageSpikesOdor,24),nrow = 110, ncol = 24, byrow = FALSE)  #normalized to average spking rate as 100 Hz
+
+
+index <- seq(1,300,1)
+allCdf <- matrix(0,nrow = length(index),ncol = dim(afterScaleMatrOdor)[1])
+
+fit1 <- ecdf(afterScaleMatrOdor[1,])
+allCdf[,1] <- fit1(index)
+plot(fit1,do.points=FALSE,xlim = c(0,300),main ="",ylab = "cdf",xlab = "spiking rate (Hz)",cex.lab = 1.5,cex.axis = 1.5)
+for (i0 in 2:dim(afterScaleMatrOdor)[1]){
+  temp <- ecdf(afterScaleMatrOdor[i0,])
+  plot(temp,verticals=TRUE, do.points=FALSE,add=TRUE)
+  allCdf[,i0] <- temp(index)
+}
+
+# generated from exponential distributions
+plot(ecdf(rexp(24,rate = 1/normVal)),verticals=TRUE, do.points=FALSE,main = "",xlim = c(0,300),xlab = "spiking rate (Hz)",ylab = "cdf",cex.lab = 1.5,cex.axis = 1.5)
+for (i0 in 2:dim(afterScaleMatrOdor)[1]){
+  plot(ecdf(rexp(24,rate = 1/normVal)),verticals=TRUE, do.points=FALSE,add=TRUE)
+}
+
+#plot the average cdf
+plot(index,apply(allCdf, 1,mean),main = "",xlab = "spiking rate (Hz)",ylab = "cdf",cex.lab = 1.5,cex.axis = 1.5)
+curve(pexp(x, rate = 1/normVal), col = "red", lwd =3,add = TRUE) #overlay an exponential distribution
+dev.off()
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# response under different concentration and fruit odor mixture
+# first, monomolecular at different concentration
+odorNames <- concenData[,1]
+dataMat <- as.matrix(concenData[,3:26])
+allConPure <- concenData[1:40,2]
+sp <- abs(apply(dataMat, 2, min))   # spontaneous rate
+dataReset <- dataMat + matrix(rep(sp,dim(dataMat)[1]), nrow = dim(dataMat)[1],ncol = dim(dataMat)[2],byrow = T)
+pureOdor <- dataReset[1:40,]  #pure odorants
+fruit <- dataReset[41:76,]    #fruit odor
+con <- 10^(c(-8,-6,-4,-2))
+# aggregate(pureOdor,by = list(pureOdor$dilution),mean)
+meanStatisc <- matrix(0,nrow = length(con),2)  #mean and std
+for (i0 in 1:4){
+   srow <- allConPure == 2*i0
+   meanStatisc[i0,]<- c(mean(pureOdor[srow,]),sd(pureOdor[srow,]))
+}
+plot(sort(con,decreasing = T),meanStatisc[,1], log = "xy")
+
+
+#average spiking rate under different concentration
+
+pureOdor <- grep("-[0-9]$",odorNames)
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 #function that plot all the basic statistical figures in the paper
+
 plotBasic<-function(rawMatx)
 {
     #x is the data frame that contain the original data
@@ -98,6 +286,14 @@ plotBasic<-function(rawMatx)
     dev.off()
 }
 
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# function test if the response follows a certain distribution
+
+
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 maxSpike<-apply(rawMatx,2,max)  #the largest spiking rate of each ORN
 minSpike<-apply(rawMatx,2,min)  #strongest inhibition of each ORN
 
@@ -183,7 +379,7 @@ dev.off()
 
 cluster<-function(X, #matrix contain observes
                   disMeth = c("euclidean","manhattan","cosine"), #distance method
-                  clusMeth = c("average","minimum"),#clustering method
+                  clusMeth = c("average","minimum")#clustering method
                   )
 {
     hcEuc<-hclust(dist(X,method = disMeth),method = clusMeth)
@@ -328,21 +524,6 @@ PCAvar3dplot<-function(x,            #matrix or data frame
 }
 
 #calculate the the survival function
-survivalFun<-function(x,    #vector, matrix, data frame
-                      figure=TRUE)
-  {
-    if(is.matrix(x)){
-        y<-as.vector(x)
-    }
-    else if(is.vector(x){
-        y<-x
-    }
-    z<-ecdf(y)
-    uniqueX<-unique(y)
-    surFun<- 1-z(uniqueX)
-    plot(uniqueX,surFun,type = "s",xlab = "Firing rate(spikes/s)",ylab = "Fraction of neurons",cex.main = 1.5)
-    return(surFun)
-}
 
 PCAvar3dplot(ORNwithoutInhiMatx,categoryName)
 
@@ -462,7 +643,7 @@ hist(cosPN[[2]],25,xlim=limXlab,col='skyblue',border=F,xlab = "angle between pat
 hist(cosPNnoInhi[[2]],25,add=T,col=scales::alpha('red',.5),border=F)
 
 #plot the corrematrix
-corrplot(cosPNnoInhi[[1],method = "circle",order="hclust")
+corrplot(cosPNnoInhi[[1]],method = "circle",order="hclust")
 
 
 dev.new()
