@@ -1,17 +1,17 @@
-testDistriOSNOr <- function(resMatr,stMethod,normalizedRate = 50,...)
+testDistriOSNOr <- function(resMatr,stMethod,normalizedRate = 50,fileName,...)
 {
   # this function test the distribution of odor-OSN response
   # resMatr    the repsonse matrix, all the elements should be larger than 0
   # stMethod    test the distribution, can be exponential, lognormal,or gamma
   # normalizedRate  the spiking rate set as a common mean spiking rate
-  # savePlot    whether save the plot or not
+  # fileName    figure name
   
   
   COL <- dim(resMatr)[2]  #number of variables
   ROW <- dim(resMatr)[1]  #number of measurement
   
   # figure name and plot setting
-  saveFile = paste("testDistri_",stMethod,".pdf",sep ="")
+  saveFile = paste(fileName,"_",stMethod,".pdf",sep ="")
   pdf(saveFile,width = 8,height = 6)
   par(mfrow=c(2,2),mai=c(0.7,0.8,0.3,0.5))
   
