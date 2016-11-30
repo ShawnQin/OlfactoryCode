@@ -24,7 +24,8 @@ library(latticeExtra) #plot cumulative density functions
 
 # source other R scripts
 source("testDistriOSNOr.R")   #plot all single OSN or Odor
-source("testDistAll.R")     #plot overall response distribtuion
+source("testDistAll.R")     # plot overall response distribtuion
+source("rquery.cormat.R")   # load the function for correlaogram
 
 #change the workspace
 FileFolder<-"/home/shan/GoogleDrive/olfactoryCoding"
@@ -39,8 +40,8 @@ rawData1<-read.xlsx(filePath,1)   #with the last line as the
 concenData <- read.xlsx(fruitFile,1) # different concentration and fruit odor mixtures
 digitResponse<-read.xlsx(digiFile,1) 
 
-#load the function for correlaogram
-source("rquery.cormat.R")
+
+
 
 #the data type of rawData1 is a list with the first column as the name
 #first, calculate the distribution of firing rate regardless of ORNs and odorants
@@ -87,45 +88,6 @@ testDistriOSNOr(resetPosiMatr,"lnorm",normalizedRate = 48,fileName)
 # cumulative distribution of odorants
 fileName <- "testDistriOdorant"
 testDistriOSNOr(t(resetPosiMatr),"exp",normalizedRate = 48,fileName)
-# pdf("testDistriOdorant.pdf",width = 8,height = 6)
-# par(mfrow=c(2,2),mai=c(0.7,0.8,0.3,0.5))
-# 
-# # original data
-# plot.ecdf(rawMatx[1,],do.points=FALSE,xlim = c(-50,290),main = "",xlab = "spiking rate (HZ)", ylab = "cdf",cex.lab = 1.5,cex.axis = 1.5)
-# for (i0 in 2:dim(rawMatx)[1]){
-#   temp <- ecdf(rawMatx[i0,])
-#   plot(temp,verticals=TRUE, do.points=FALSE,add=TRUE)
-# }
-# 
-# #normalized to 100 Hz 
-# normVal <- 50  # normalized average sipking rate
-# averageSpikesOdor <- apply(resetPosiMatr, 1, mean)
-# afterScaleMatrOdor <- resetPosiMatr*matrix(rep(normVal/averageSpikesOdor,24),nrow = 110, ncol = 24, byrow = FALSE)  #normalized to average spking rate as 100 Hz
-# 
-# 
-# index <- seq(1,300,1)
-# allCdf <- matrix(0,nrow = length(index),ncol = dim(afterScaleMatrOdor)[1])
-# 
-# fit1 <- ecdf(afterScaleMatrOdor[1,])
-# allCdf[,1] <- fit1(index)
-# plot(fit1,do.points=FALSE,xlim = c(0,300),main ="",ylab = "cdf",xlab = "spiking rate (Hz)",cex.lab = 1.5,cex.axis = 1.5)
-# for (i0 in 2:dim(afterScaleMatrOdor)[1]){
-#   temp <- ecdf(afterScaleMatrOdor[i0,])
-#   plot(temp,verticals=TRUE, do.points=FALSE,add=TRUE)
-#   allCdf[,i0] <- temp(index)
-# }
-# 
-# # generated from exponential distributions
-# plot(ecdf(rexp(24,rate = 1/normVal)),verticals=TRUE, do.points=FALSE,main = "",xlim = c(0,300),xlab = "spiking rate (Hz)",ylab = "cdf",cex.lab = 1.5,cex.axis = 1.5)
-# for (i0 in 2:dim(afterScaleMatrOdor)[1]){
-#   plot(ecdf(rexp(24,rate = 1/normVal)),verticals=TRUE, do.points=FALSE,add=TRUE)
-# }
-# 
-# #plot the average cdf
-# plot(index,apply(allCdf, 1,mean),main = "",xlab = "spiking rate (Hz)",ylab = "cdf",cex.lab = 1.5,cex.axis = 1.5)
-# curve(pexp(x, rate = 1/normVal), col = "red", lwd =3,add = TRUE) #overlay an exponential distribution
-# dev.off()
-
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # response under different concentration and fruit odor mixture
@@ -157,6 +119,14 @@ for (i0 in 1:4){
    srow <- allConPure == 2*i0
    meanStatisc[i0,]<- c(mean(pureOdor[srow,]),sd(pureOdor[srow,]))
 }
+# transform it into a data frame, plot  and do the liner regression
+meanResFrame <- data.frame(
+  conc= sort(log10(con),decreasing = T),
+  meanVal = meanStatisc[,1],
+  std = meanStatisc[,2]
+)
+mp <- ggplot(meanResFrame,aes(x=conc,y=meanVal)) + geom_pointrange(aes(ymin=meanVal-std, ymax=meanVal+std)) + geom_point() + geom_smooth(method='lm',formula=y~x) + theme_bw() +  theme(axis.line.x = element_line(color="black", size = 0.5),axis.line.y = element_line(color="black", size = 0.5)) + labs(x = "log(concentration)",y="mean firing rate") + theme(axis.text = element_text(size=18), axis.title = element_text(size=20,face="bold"))
+mp
 plot(sort(con,decreasing = T),meanStatisc[,1], log = "xy")
 
 
@@ -226,8 +196,6 @@ plotBasic<-function(rawMatx)
 }
 
 
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# function test if the response follows a certain distribution
 
 
 
