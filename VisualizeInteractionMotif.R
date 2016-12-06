@@ -13,22 +13,24 @@ library(ggplot2)
 library(igraph)
 library(network)
 library(sna)
+library(visNetwork)
 
 #source some functions
 source("ShuffledData.R")
 source("RandomizedMatrx.R")
 
 #load data file
-digiFile<-"data/CarslonORNdigit.xlsx"
+digiFile<-"/Users/shan/Documents/GoogleDrive/olfactoryCoding/data/CarslonORNdigit.xlsx"
 rawData1<-read.xlsx(digiFile,1)
 rawMatx <- as.matrix(rawData1[,3:length(rawData1)])
+chemType <- as.character(rawData1[,2])
 rownames(rawMatx)<- rawData1$odorantName[1:110]
 
 #delete odorants that don't elicite any response
 adjustSpikingMatx<-rawMatx     #estimated absolute ORNs spiking rate
 temp<-apply(abs(adjustSpikingMatx),1,sum)
 newMatx <- adjustSpikingMatx[which(temp >0),]
-
+allType <- chemType[which(temp >0)]
 ##====================== finding motif ===============
 # adjacent matrix, wiht elements 0, -1 and 1
 adjMatx <- newMatx
@@ -37,7 +39,7 @@ adjMatx[adjMatx > 0] <- 1
 #first find the "bi-fan" motif
 countBiFan <- 0  #used to count all the combination of observed bi-fan motif
 negBiFanCount <-  0  # we are extramely interested in cross negative response bi-fan structure
-recordMatx <- matrix(NA,nrow = 0, ncol = 6) #i, j, OSN1, OSN2, posi_strength-i, posi_strength-j
+recordMatx <- matrix(NA,nrow = 0, ncol = 8) #i, j, OSN1, OSN2, resp-i1,respon-i2, respon-j1,respon-j2
 allBifanMatx <- matrix(NA,nrow = 0, ncol = 8) # all combination of bi-fan motif
 allCategoryCount <- rep(0, 7) # 7 different two-node motif
 for (i in 1:(dim(adjMatx)[1]-1)){
@@ -56,7 +58,7 @@ for (i in 1:(dim(adjMatx)[1]-1)){
                 if (R1[1]*R2[1] < 0 && R1[2]*R2[2] < 0 && R1[1]*R1[2] < 0){
                     negBiFanCount <- negBiFanCount + 1
                     allCategoryCount[4] <- allCategoryCount[4] + 1
-                    recordMatx <- rbind(recordMatx,c(i,j,combinationBiFan[,k],max(newMatx[i,combinationBiFan[,k]]),max(newMatx[j,combinationBiFan[,k]])))
+                    recordMatx <- rbind(recordMatx,c(i,j,combinationBiFan[,k],newMatx[i,combinationBiFan[,k]],newMatx[j,combinationBiFan[,k]]))
                 }
                 else if (all(c(R1,R2) > 0)){
                     allCategoryCount[1] <- allCategoryCount[1] + 1
@@ -135,6 +137,8 @@ for (i in 1:(dim(adjMatxShuffled)[1]-1)){
 allNumberExist[l0,] <- c(countBiFanShuffled,negBiFanCountShuffled)
 }
 
+# Zscore of different moitif
+Zscore <- abs((colMeans(allCategoryCountShuffled)-allCategoryCount))/apply(allCategoryCountShuffled, 2, sd)
 # statistics of different motif in ranomized network
 cateRandStat <- data.frame(
     sys = c(rep('random',7),rep('original',7)),
@@ -157,7 +161,183 @@ gmtif <- ggplot(motifStatistics,aes(x=category,y=meanNumber,color=category)) + g
 gmotifrand <- ggplot(cateRandStat,aes(x = motif,y = meanNum,fill = sys,width = 0.9)) + geom_bar(stat = "identity",color = "black", position = position_dodge()) + geom_errorbar(aes(ymin=meanNum,ymax = meanNum + std), width = 0.2, position = position_dodge(.9))
 gmotifrand <- gmotifrand + theme_classic() + scale_fill_manual(values = mycolor[c(1,10)]) + theme(axis.line.x = element_line(color="black", size = 0.5),axis.line.y = element_line(color="black", size = 0.5)) + labs(x = "motif",y="counts")+ theme(axis.text = element_text(size=14), axis.title = element_text(size=18,face="bold"))
 
+
+
 ##====================== visualization the interaction network===============
+## trime the data can be supported in igraph
+## dimension of bipartite networks
+NumOdors <- length(unique(as.vector(recordMatx[,c(1,2)])))
+NumOr <- length(unique(as.vector(recordMatx[,c(3,4)])))
+
+allOdorName <- rownames(newMatx)
+allOrName <- colnames(newMatx)
+# allType, the chemical type of these 107 odorants
+## initialize the adjecent matrix
+links <- matrix(NA,nrow = 107,ncol = 24)
+colnames(links) <- colnames(newMatx)
+rownames(links) <- rownames(newMatx)
+for(i in 1:dim(recordMatx)[1]){
+   oneRow <- recordMatx[i,]
+   links[oneRow[1],oneRow[3]] <- oneRow[5]
+   links[oneRow[1],oneRow[4]] <- oneRow[6]
+   links[oneRow[2],oneRow[3]] <- oneRow[7]
+   links[oneRow[2],oneRow[4]] <- oneRow[8]
+}
+
+#get rid of irrelavent rows and columns
+irRow <- apply(links,1,function(x) all(is.na(x)))
+irCol <- apply(links,2,function(x) all(is.na(x)))
+links2 <- links[-which(irRow),-which(irCol)]
+relType <- allType[-which(irRow)]  #chemical types
+
+#final chemical types 
+fType <- allType[-which(irRow)]
+
+nodes <- data.frame(
+      id = c(rownames(links2),colnames(links2)),
+      cType = c(as.character(fType),rep(NA,times = dim(links2)[2])),
+      category = c(rep(1,times=dim(links2)[1]),rep(2,times=dim(links2)[2]))
+)
+
+#use igraph to plot the bipartite network
+net <- graph_from_incidence_matrix(links2)
+table(V(net)$type)
+#mycolor <- brewer.pal(11,"Spectral")
+mycolor <- c(brewer.pal(9,"Set1"),"black")
+colrs <- mycolor[c(1,10)]
+V(net)$color <- mycolor[nodes$cType]
+plot(net,vertex.label=NA,vertex.size = 4,layout=layout.bipartite)
+
+
+tx <- links2
+tx[is.na(tx)] <- 0
+link3 <- as.data.frame(which(tx!=0,arr.ind = T))
+odorID <- rownames(tx)[link3[,1]]
+orID <- colnames(tx)[link3[,2]]
+wt <- abs(tx[as.matrix(link3)])
+edgeType <- tx[as.matrix(link3)]
+edgeType[edgeType > 0] <- 1  #excitatory
+edgeType[edgeType < 0] <- 2  #inhibitory
+link3[] <- cbind(odorID,orID)
+link3$width <- wt
+link3$color <- c("grey","red")[edgeType]
+colnames(link3) <- c("from","to","width","color")
+#nodes3 <- c(unique(link3[,1]),unique(link3[,2]))
+#nodes$id <- c(unique(link3[,1]),unique(link3[,2]))
+
+
+nodes$label <- c(rownames(tx),colnames(tx))
+nodes$shape <- c("square","circle")[nodes$category]
+nodes$color.background <- mycolor[nodes$cType]
+nodes$color.border <- "black"
+nodes$color.highlight.background <-"orange"
+nodes$color.highlight.border <- "darked"
+nodes$size <- rep(20,times=length(nodes$shape))
+#nodes$label <- rep(NA,times=length(nodes$shape))
+
+visNetwork(nodes,link3)
+
+visNetwork(nodes, link3) %>% visOptions(highlightNearest = TRUE,selectedBy = "cType")
+
+
+#sub networks of odors elicit negative and positive response on at least three OSNs
+# based on recordMatrx
+nOdor <- table(recordMatx[,1])
+bifanInd <- as.data.frame(recordMatx[,1:2])
+repTable <- aggregate(list(numdup=rep(1,nrow(bifanInd))),bifanInd,length)
+selecTable <- subset(repTable,numdup>3)
+allSubNet <- c()
+par(mfrow=c(4,3), mar=c(1,1,1,1))
+for (i in 1:dim(selecTable)[1]){
+    subTab <- recordMatx[recordMatx[,1] == selecTable[i,1] & recordMatx[,2] == selecTable[i,2],]
+    links4 <- as.data.frame(unique(rbind(subTab[,c(1,3,5)],subTab[,c(1,4,6)],subTab[,c(2,3,7)],subTab[,c(2,4,8)])))
+    links4[,1:2] <- cbind(rownames(adjMatx)[links4[,1]],colnames(adjMatx)[links4[,2]])
+    colnames(links4) <- c("from","to","weight")
+    links4$color <- c("red","grey")[as.factor(links4$weight>0)]
+    links4$width <- abs(links4$weight)*1.5
+    
+    nodes4 <- data.frame(id=c(unique(links4[,1]),unique(links4[,2])),color=c("blue","red")[as.factor(c(1,1,rep(2,times = length(unique(as.vector(subTab[,3:4]))))))])
+    nodes4$shape <- c("square","circle")[as.factor(nodes4$color)]
+    nodes4$color <- c(mycolor[allType[subTab[1,1:2]]],rep("#E0E0E0",length(unique(as.vector(subTab[,3:4])))))
+    nodes4$label <- nodes4$id
+    nodes4$size <- rep(20,times=length(nodes4$id))
+    allSubNet[[i]] <- visNetwork(nodes4,links4)
+    #browser()
+    rm(nodes4)
+    rm(links4)
+    rm(subTab)
+    #
+    
+    #nodeName <- c(rownames(adjMatx)[subTab[1,1:2]],unique(links4[,2]))
+    
+    # bipartite
+    # bmx <-acast(as.data.frame(links4),from ~ to)
+    # bmx <- matrix(as.numeric(unlist(bmx)),nrow=nrow(bmx))
+    # 
+    # net5 <- graph_from_incidence_matrix(bmx)
+    # V(net5)$label <- nodeName
+    # plot(net5,layout=layout.bipartite)
+}
+
+
+#calculate the degree distribution based on links2 information 
+dm <- links2
+dm[is.na(dm)] <- 0
+posiDegree<- apply(dm>0, 1, sum)
+negaDegree <- apply(dm<0, 1, sum)
+OrPosiDegr <- apply(dm>0, 2, sum)
+OrNegaDegr <- apply(dm<0, 2, sum)
+OdorDegreeFrame <- data.frame(
+    odor= rep(factor(rownames(links2),levels = rownames(links2)),times = 2),
+    type = factor(rep(c("positive","negative"),each=length(posiDegree))),
+    deg = c(posiDegree,negaDegree),
+    category = c(relType,relType)
+)
+degPlot <- ggplot(OdorDegreeFrame, aes(x=odor, y= deg,fill=type))+ geom_bar(stat="identity") + coord_flip()  #here use reorder to oder the bar "reorder(odor, -deg)"
+degPlot <- degPlot + theme_classic() + theme(axis.line.x = element_line(color="black", size = 0.5),axis.line.y = element_line(color="black", size = 0.5)) + labs(x = "odorant",y="degree")+ theme(axis.text.y = element_text(size=10,color = mycolor[factor(relType)]),axis.text.x = element_text(size=14), axis.title = element_text(size=18,face="bold"))
+ggsave(degPlot,file = "degreeDistBifan.pdf",width = 6,height = 7)
+
+# the degree of OSN
+OSNDegreeFrame <- data.frame(
+    OSN= rep(colnames(links2),times = 2),
+    type = factor(rep(c("positive","negative"),each=length(OrPosiDegr))),
+    deg = c(OrPosiDegr,OrNegaDegr)
+)
+degOrPlot <- ggplot(OSNDegreeFrame, aes(x= reorder(OSN,-deg), y= deg,fill=type))+ geom_bar(stat="identity") + coord_flip()  #here use reorder to oder the bar "reorder(odor, -deg)"
+degOrPlot <- degOrPlot + theme_classic() + theme(axis.line.x = element_line(color="black", size = 0.5),axis.line.y = element_line(color="black", size = 0.5)) + labs(x = "odorant",y="degree")+ theme(axis.text = element_text(size=14),axis.title = element_text(size=18,face="bold"))
+ggsave(degOrPlot,file = "degreeOSNDistBifan.pdf",width = 4,height = 5)
+
+
+#=============================================================
+# some odorants elicits much strong responses, those at the tail of distribution
+# sort the odorants that can elicits strong OSN responses
+odorRespSumm <- apply(abs(adjMatx)>0, 1, sum)
+odorSum <- data.frame(
+        odor = factor(rownames(adjMatx)[-which(odorRespSumm<=9)],levels = rownames(adjMatx)[-which(odorRespSumm<=9)]),
+        repNum = odorRespSumm[odorRespSumm>9],
+        category = allType[-which(odorRespSumm<=9)]
+)
+
+mycolor <- c(brewer.pal(8,"Dark2"),"#A6CEE3","black")
+odorSumPlot <- ggplot(odorSum, aes(x=odor, y= repNum))+ geom_bar(stat="identity") + coord_flip()  #here use reorder to oder the bar "reorder(odor, -deg)"
+odorSumPlot <- odorSumPlot + theme_classic() + theme(axis.line.x = element_line(color="black", size = 0.5),axis.line.y = element_line(color="black", size = 0.5)) + labs(x = "odorant",y="number OSN response")+ theme(axis.text.y = element_text(size=10,color = mycolor[odorSum$category]),axis.text.x = element_text(size=14), axis.title = element_text(size=18,face="bold"))
+ggsave(odorSumPlot,file = "strongOdor.pdf",width = 5,height = 5)
+# net <- graph_from_data_frame(d=link3, vertices=nodes, directed=T)
+# plot(net,edge.arrow.size=.4,vertex.label=NA,edge.color = link3$color,vertex.color = nodes$color.background,layout=layout_randomly)
+# #second method to generate a igraph
+# links3 <- data.frame(from = integer(),to = integer(),type = charsacter(),weight = integer())
+# for(i in 1:dim(recordMatx)[1]){
+#     #oneRow <- recordMatx[i,]
+#     links3$from[i] = recordMatx[i,1]
+#     links3$to[i] = recordMatx[i,2]
+#     if(recordMatx[i,3] >0){
+#       links3$type[i] = "activation"
+#     }
+#     else{
+#       links3$type[i] = "inhibition"
+#     }
+#     links3$weight[i] = recordMatx[i,3]
+# }
 # mycolor <- brewer.pal(11,"Spectral")
 # posiInter <- newMatx
 # posiInter[posiInter < 0] <- 0
