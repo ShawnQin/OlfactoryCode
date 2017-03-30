@@ -15,7 +15,7 @@ visualBifan <-function(recordMatx,allOdorName,allOrName,allType,visualNet = FALS
     ## dimension of bipartite networks
     NumOdors <- length(unique(as.vector(recordMatx[,c(1,2)])))
     NumOr <- length(unique(as.vector(recordMatx[,c(3,4)])))
-    browser()
+    #browser()
     
     #allOdorName <- rownames(newMatx)
     #allOrName <- colnames(newMatx)

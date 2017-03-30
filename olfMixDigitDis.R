@@ -29,7 +29,7 @@ source("plotPCAEntropy.R")
 source("histCount.R")
 
 #load data file
-digiFile<-"data/CarslonORNdigit.xlsx"
+digiFile<-"../data/CarslonORNdigit.xlsx"
 #rawData1<-read.xlsx(filePath,1)   #with the last line as the 
 rawData1<-read.xlsx(digiFile,1)
 rawMatx <- as.matrix(rawData1[,3:length(rawData1)])

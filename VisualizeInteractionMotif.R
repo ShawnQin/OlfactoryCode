@@ -2,42 +2,35 @@
 # and try to find motif
 # this is a bipartite network
 # we use the interaction matrix from Hallem 2006 paper
-# also comparing the physichemical properties of the strong odorants and odorants 
-# elicit strong inhibitory responses
-# last revised on 12/10/2016
+# last revised on 01/17/2017
 ##===================================================##
 
 #load the packages
 #load liberies
-library(xlsx)
-library(RColorBrewer)  #this package is used for color settings
-library(ggplot2)
-library(igraph)
+library(xlsx)          # package used to read xlsx file
+library(RColorBrewer)  # this package is used for color settings
+library(ggplot2)       # plot 
+library(igraph)        #
 library(network)
 library(sna)
-library(visNetwork)
 
 #source some functions
 source("ShuffledData.R")
 source("RandomizedMatrx.R")
-source("findMotif.R")            # find two-nodes motif
-source("visualBifan.R")           # visualize bifan motifs
-source("analysisStrongOdor.R")   #select the strongest odorants
 
 #load data file
-digiFile<-"/Users/shan/Documents/GoogleDrive/olfactoryCoding/data/CarslonORNdigit.xlsx"
+digiFile<-"data/CarslonORNdigit.xlsx"
 rawData1<-read.xlsx(digiFile,1)
 rawMatx <- as.matrix(rawData1[,3:length(rawData1)])
-chemType <- as.character(rawData1[,2])
+chemType <- rawData1[,2]
 rownames(rawMatx)<- rawData1$odorantName[1:110]
 
 #delete odorants that don't elicite any response
 adjustSpikingMatx<-rawMatx     #estimated absolute ORNs spiking rate
 temp<-apply(abs(adjustSpikingMatx),1,sum)
 newMatx <- adjustSpikingMatx[which(temp >0),]
-allType <- as.numeric(factor(chemType[which(temp >0)]))
+allType <- chemType[which(temp >0)]
 ##====================== finding motif ===============
-#allMotif <- findMotif(newMatx)
 # adjacent matrix, wiht elements 0, -1 and 1
 adjMatx <- newMatx
 adjMatx[adjMatx > 0] <- 1
@@ -90,21 +83,21 @@ for (i in 1:(dim(adjMatx)[1]-1)){
 }
 
 #================== randomly shuffling ================
-numShuffle <- 100  #try 100 times
+numShuffle <- 100     #try 100 times
 allNumberExist <- matrix(0, nrow = numShuffle, ncol = 2)
 #shuffling matrix
 allCategoryCountShuffled <- matrix(0, nrow = numShuffle, ncol = 7) # 7 different two-node motif
 for (l0 in 1:numShuffle){
 # shuffledMatx <- ShuffledData(newMatx,WhichWay = "both")
-shuffledMatx <- RandomizedMatrx(newMatx,method="switch")
+shuffledMatx <- RandomizedMatrx(newMatx,method="switch") #randomized matrix
 adjMatxShuffled <- shuffledMatx
 adjMatxShuffled[shuffledMatx > 0] <-1
 countBiFanShuffled <- 0
 negBiFanCountShuffled <- 0
 for (i in 1:(dim(adjMatxShuffled)[1]-1)){
     for (j in (i+1):dim(adjMatxShuffled)[1]){
-        inx1 <- which(adjMatxShuffled[i,] != 0) #nonzero elements for odor i
-        inx2 <- which(adjMatxShuffled[j,] != 0) #nonzero elements for odor j
+        inx1 <- which(adjMatxShuffled[i,] != 0)   #nonzero elements for odor i
+        inx2 <- which(adjMatxShuffled[j,] != 0)   #nonzero elements for odor j
         sharedOSN <- intersect(inx1, inx2) #shared OSN
         if(length(sharedOSN) >= 2){
             combinationBiFan <- combn(sharedOSN,2)  #each column is a combination
@@ -154,15 +147,13 @@ cateRandStat <- data.frame(
 )
 
 #bar plot of total bi-fan motif and negative motif
-
-mycolor <- brewer.pal(11,"Spectral")
+mycolor <- brewer.pal(11,"Spectral")   #set the plot color
 motifStatistics <- data.frame(
     category = c("total", "cross negative"),
     meanNumber = colMeans(allNumberExist),
     std = c(sd(allNumberExist[,1]),sd(allNumberExist[,2]))
 )
-gmtif <- ggplot(motifStatistics,aes(x=category,y=meanNumber,color=category)) + geom_bar(stat="identity", color="black", position=position_dodge()) + geom_errorbar(aes(ymin=meanNumber, ymax=meanNumber + std), width=.2,
-                  position=position_dodge(.9)) 
+gmtif <- ggplot(motifStatistics,aes(x=category,y=meanNumber,color=category)) + geom_bar(stat="identity", color="black", position=position_dodge()) + geom_errorbar(aes(ymin=meanNumber, ymax=meanNumber + std), width=.2,position=position_dodge(.9)) 
 
 ## bar plot of different motif in randomized network
 gmotifrand <- ggplot(cateRandStat,aes(x = motif,y = meanNum,fill = sys,width = 0.9)) + geom_bar(stat = "identity",color = "black", position = position_dodge()) + geom_errorbar(aes(ymin=meanNum,ymax = meanNum + std), width = 0.2, position = position_dodge(.9))
@@ -171,17 +162,185 @@ gmotifrand <- gmotifrand + theme_classic() + scale_fill_manual(values = mycolor[
 
 
 ##====================== visualization the interaction network===============
+## trime the data can be supported in igraph
+## dimension of bipartite networks
+NumOdors <- length(unique(as.vector(recordMatx[,c(1,2)])))
+NumOr <- length(unique(as.vector(recordMatx[,c(3,4)])))
 
 allOdorName <- rownames(newMatx)
 allOrName <- colnames(newMatx)
-visualBifan(recordMatx,allOdorName,allOrName,allType,visualNet = FALSE)
+# allType, the chemical type of these 107 odorants
+## initialize the adjecent matrix
+links <- matrix(NA,nrow = 107,ncol = 24)
+colnames(links) <- colnames(newMatx)
+rownames(links) <- rownames(newMatx)
+for(i in 1:dim(recordMatx)[1]){
+   oneRow <- recordMatx[i,]
+   links[oneRow[1],oneRow[3]] <- oneRow[5]
+   links[oneRow[1],oneRow[4]] <- oneRow[6]
+   links[oneRow[2],oneRow[3]] <- oneRow[7]
+   links[oneRow[2],oneRow[4]] <- oneRow[8]
+}
 
-#=============================================================
-allStrong <- analysisStrongOdor(adjMatx,allType)
+#get rid of irrelavent rows and columns
+irCol <- apply(links,1,function(x) all(is.na(x)))
+irRow <- apply(links,2,function(x) all(is.na(x)))
+links2 <- links[-which(irCol),-which(irRow)]
 
-#======================================================================
-# compare these strong odorants
-# file containing all the phyical and chemical informations
-phyChemFile <- "/Users/shan/Documents/GoogleDrive/olfactoryCoding/data/Knaden2012-S1.xlsx"
-phyChemData <- read.xlsx(phyChemFile,2)
-colnames(phyChemData) <- as.character(phyChemData)
+#final chemical types 
+fType <- allType[-which(irCol)]
+
+nodes <- data.frame(
+      id = c(rownames(links2),colnames(links2)),
+      cType = c(as.character(fType),rep(NA,times = dim(links2)[2])),
+      category = c(rep(1,times=dim(links2)[1]),rep(2,times=dim(links2)[2]))
+)
+
+#use igraph to plot the bipartite network
+net <- graph_from_incidence_matrix(links2)
+table(V(net)$type)
+mycolor <- brewer.pal(11,"Spectral")
+mycolor <- brewer.pal(8,"Accent")
+colrs <- mycolor[c(1,10)]
+V(net)$color <- mycolor[nodes$cType]
+plot(net,vertex.label=NA,vertex.size = 4,layout=layout.bipartite(net,hgap = 5,vgap=3))
+
+
+tx <- links2
+tx[is.na(tx)] <- 0
+link3 <- which(tx!=0,arr.ind = T)
+colnames(link3) <- c("from","to")
+nodes3 <- c(unique(link3[,1]),unique(link3[,2]))
+nodes$id <- c(unique(link3[,1]),unique(link3[,2]))
+nodes$label <- c(rownames(tx),colnames(tx))
+nodes$shape <- c("circle","square")[nodes$category]
+nodes$color.background <- mycolor[nodes$cType]
+nodes$color.border <- "black"
+nodes$color.highlight.background <-"orange"
+nodes$color.highlight.border <- "darked"
+
+visNetwork(nodes,links3)
+#second method to generate a igraph
+links3 <- data.frame(from = integer(),to = integer(),type = character(),weight = integer())
+for(i in 1:dim(recordMatx)[1]){
+    #oneRow <- recordMatx[i,]
+    links3$from[i] = recordMatx[i,1]
+    links3$to[i] = recordMatx[i,2]
+    if(recordMatx[i,3] >0){
+      links3$type[i] = "activation"
+    }
+    else{
+      links3$type[i] = "inhibition"
+    }
+    links3$weight[i] = recordMatx[i,3]
+}
+# mycolor <- brewer.pal(11,"Spectral")
+# posiInter <- newMatx
+# posiInter[posiInter < 0] <- 0
+# posiInter[posiInter > 0] <-1
+# netP <- graph_from_incidence_matrix(posiInter)
+# vcolors <- c(rep("gray",dim(posiInter)[1]),rep("red",dim(posiInter)[2]))
+# V(netP)$color <- vcolors
+# V(netP)$label <- NA
+# V(netP)$size <- 3
+# 
+# plot(netP)
+# plot(netP, vertex.label=NA, vertex.size=4, layout=layout.bipartite) 
+# plot(netP, edge.arrow.mode=0, layout="layout_as_bipartite", main=layout)
+# 
+# allInter <- newMatx
+# allInter[allInter!=0] <- 1
+# plot(netA,layout=layout.bipartite,vertex.label=NA,vertex.size=4,vertex.color=c(mycolor[1],mycolor[10])[V(netA)$type+1],vertex.frame.color = NA)
+
+# netDataFrame <- aggregate(allInter,)
+
+
+#delete the ORNs that only have inhibitory response or no repoonse
+# tempORN <- apply(apply(newMatx,2,range),2,sum)
+# newMatx <-newMatx[,-which(tempORN==-1)]
+
+# ##=======================example ===========================
+# filePath <- "/Users/shan/Desktop/polnet2016/Data\ files/"
+# fileName1 <- paste(filePath,"Dataset1-Media-Example-NODES.csv",sep = "")
+# fileName2 <- paste(filePath,"Dataset1-Media-Example-EDGES.csv",sep = "")
+# nodes <- read.csv(fileName1, header=TRUE, as.is=TRUE)
+# links <- read.csv(fileName2, header=TRUE, as.is=TRUE)
+# links <- aggregate(links[,3], links[,-3], sum)
+# links <- links[order(links$from, links$to),]
+# colnames(links)[4] <- "weight"
+# rownames(links) <- NULL
+# 
+# ## another data set
+# fileName3 <- paste(filePath,"Dataset2-Media-User-Example-NODES.csv",sep = "")
+# fileName4 <- paste(filePath,"Dataset2-Media-User-Example-EDGES.csv",sep = "")
+# nodes2 <- read.csv(fileName3, header=T, as.is=T)
+# links2 <- read.csv(fileName4, header=T, row.names=1)
+# links2 <- as.matrix(links2)
+# 
+# net <- graph_from_data_frame(d=links, vertices=nodes, directed=T)
+# plot(net)  #plot, but not a pretty network
+# net <- simplify(net, remove.multiple = F, remove.loops = T)
+# plot(net, edge.arrow.size=.4,vertex.label=NA)
+# 
+# net2 <- graph_from_incidence_matrix(links2)
+# 
+# colrs <- c("gray50", "tomato", "gold")
+# V(net)$color <- colrs[V(net)$media.type]
+# 
+# # Compute node degrees (#links) and use that to set node size:
+# deg <- degree(net, mode="all")
+# V(net)$size <- deg*3
+# # We could also use the audience size value:
+# V(net)$size <- V(net)$audience.size*0.6
+# 
+# # The labels are currently node IDs.
+# # Setting them to NA will render no labels:
+# V(net)$label <- NA
+# 
+# # Set edge width based on weight:
+# E(net)$width <- E(net)$weight/6
+# 
+# #change arrow size and edge color:
+# E(net)$arrow.size <- .2
+# E(net)$edge.color <- "gray80"
+# E(net)$width <- 1+E(net)$weight/12
+# plot(net)
+# #
+# # layouts <- grep("^layout_", ls("package:igraph"), value=TRUE)[-1]
+# # # Remove layouts that do not apply to our graph.
+# # layouts <- layouts[!grepl("bipartite|merge|norm|sugiyama|tree", layouts)]
+# # par(mfrow=c(3,4), mar=c(1,1,1,1))
+# # for (layout in layouts) {
+# #     print(layout)
+# #     l <- do.call(layout, list(net))
+# #     plot(net, edge.arrow.mode=0, layout=l, main=layout) }
+# #
+# # plot(net2, vertex.label=NA, vertex.size=7, layout=layout.bipartite)
+# 
+# 
+# #====== animation
+# nodes$shape <- "dot"  
+# nodes$shadow <- TRUE # Nodes will drop shadow
+# nodes$title <- nodes$media # Text on click
+# nodes$label <- nodes$type.label # Node label
+# nodes$size <- nodes$audience.size # Node size
+# nodes$borderWidth <- 2 # Node border width
+# 
+# nodes$color.background <- c("slategrey", "tomato", "gold")[nodes$media.type]
+# nodes$color.border <- "black"
+# nodes$color.highlight.background <- "orange"
+# nodes$color.highlight.border <- "darkred"
+# 
+# visNetwork(nodes, links)
+# 
+# ##===============
+# 
+# # Random bipartite graph
+# inc <- matrix(sample(0:1, 50, replace=TRUE, prob=c(2,1)), 10, 5)
+# g <- graph.incidence(inc)
+# plot(g, layout=layout.bipartite,
+#      vertex.color=c(mycolor[1],mycolor[10])[V(g)$type+1])
+# 
+# # Two columns
+# lay <- layout.bipartite(g)
+# plot(g, layout=lay[,2:1])
