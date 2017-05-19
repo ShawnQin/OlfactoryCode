@@ -41,8 +41,6 @@ concenData <- read.xlsx(fruitFile,1) # different concentration and fruit odor mi
 digitResponse<-read.xlsx(digiFile,1) 
 
 
-
-
 #the data type of rawData1 is a list with the first column as the name
 #first, calculate the distribution of firing rate regardless of ORNs and odorants
 #convert the list into a vector
